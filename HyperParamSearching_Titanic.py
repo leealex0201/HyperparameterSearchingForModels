@@ -20,8 +20,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 
-train = pd.read_csv('/Users/Alex/Documents/Programming/Python/Kaggle/Competitions/Titanic/train.csv')
-test = pd.read_csv('/Users/Alex/Documents/Programming/Python/Kaggle/Competitions/Titanic/test.csv')
+train = pd.read_csv('../Titanic/train.csv')
+test = pd.read_csv('../Titanic/test.csv')
 
 # Store our passenger ID for easy access
 PassengerId = test['PassengerId']
