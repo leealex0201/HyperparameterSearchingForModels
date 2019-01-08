@@ -19,9 +19,11 @@ from sklearn.model_selection import RandomizedSearchCV, ShuffleSplit
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
+import os
 
-train = pd.read_csv('../Titanic/train.csv')
-test = pd.read_csv('../Titanic/test.csv')
+cwd = os.getcwd()
+train = pd.read_csv(cwd + '/Titanic/train.csv')
+test = pd.read_csv(cwd + '/Titanic/test.csv')
 
 # Store our passenger ID for easy access
 PassengerId = test['PassengerId']
