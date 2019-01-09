@@ -39,26 +39,35 @@ def get_title(name):
 def RemoveCorrFeat(data,CorrThresh,DesiredDataSize):
     # Removing highly correlated features. Features pair with pearson correlation
     # value greater than CorrThresh will be removed from the data
-    NotDone = 1
-    while NotDone:
-            
-        IndArray = data.astype(float).corr().index.values
-        CorrMat = data.astype(float).corr().values
-        CorrIndArray = []
-
-        for i in range(0,CorrMat.shape[0]-1):
-            for j in range(i+1,CorrMat.shape[0]-1):
-                if np.absolute(CorrMat[j,i]) > CorrThresh:
-                    CorrIndArray.append([IndArray[j],IndArray[i]])
     
-        CorrIndArray = np.array(CorrIndArray)
-        if (CorrIndArray.size == 0) or data.shape[1] == DesiredDataSize:
-            # no pair of feature that has correlation threshold
-            NotDone = 0
-        else:
-            unique, counts = np.unique(CorrIndArray, return_counts=True)
-            i = np.unravel_index(counts.argmax(), counts.shape)
-            data.drop([unique[i[0]]], axis = 1, inplace = True)
+    # inspect each column and drop the ones that contain only one value across all entries
+    ColNames = list(data.columns.values)
+    
+    for i in range(len(ColNames)):
+        if (data[ColNames[i]].sum(axis=0) == 0) or (data[ColNames[i]].sum(axis=0) == data[ColNames[i]].shape[0]):
+            data = data.drop([ColNames[i]], axis=1)
+        
+    if data.shape[1] > DesiredDataSize:
+        NotDone = 1
+        while NotDone:
+            
+            IndArray = data.astype(float).corr().index.values
+            CorrMat = data.astype(float).corr().values
+            CorrIndArray = []
+
+            for i in range(0,CorrMat.shape[0]-1):
+                for j in range(i+1,CorrMat.shape[0]-1):
+                    if np.absolute(CorrMat[j,i]) > CorrThresh:
+                        CorrIndArray.append([IndArray[j],IndArray[i]])
+    
+            CorrIndArray = np.array(CorrIndArray)
+            if (CorrIndArray.size == 0) or data.shape[1] == DesiredDataSize:
+                # no pair of feature that has correlation threshold
+                NotDone = 0
+            else:
+                unique, counts = np.unique(CorrIndArray, return_counts=True)
+                i = np.unravel_index(counts.argmax(), counts.shape)
+                data.drop([unique[i[0]]], axis = 1, inplace = True)
         
     return data
 
@@ -289,32 +298,36 @@ def ModelParamSearch(Param, Model, NumbModel, N_splits, X_train, y_train):
 
 def ModelStacking(Params, Models, NumbModels, X_train, y_train, X):
     N_splits = 5 # number of splits for shuffle splitting
-    NewX = pd.Series().reindex_like(y_train) # create temp pandas Series 
-    ResultParams = [None]*len(Models)
-    for i in range(len(NumbModels)):
-        print('## Searching parameter set for model: {} ... '.format(Models[i]))
-        ResultParams[i], ThisClf = ModelParamSearch(Params[i], Models[i], NumbModels[i], 
-                                     N_splits, X_train, y_train)
-        print('## Creating classifiers and predicting results of model: {} ...'.format(Models[i]))
-        for ii in range(len(ResultParams[i])):
-            # create classifiers and fit it
-            ThisClf.set_params(**ResultParams[i][ii]).fit(X_train, y_train)
-            ThisPred = ThisClf.predict(X_train) # prediction of this model
-            ThisTempPredSeries = pd.Series(ThisPred, index=y_train.index)
-            NewX = pd.concat([NewX, ThisTempPredSeries], axis=1)
-            
-    ColumnNumbers = [x for x in range(NewX.shape[1])]
-    ColumnNumbers.remove(0)
-    NewX = NewX.iloc[:, ColumnNumbers]
-    
-    ColNames = []
-    for i in range(len(NumbModels)):
-        for ii in range(NumbModels[i]):
-            ColNames.append(Models[i]+str(ii+1))
-    NewX.columns = ColNames # rename columns
-    
-    # Let's remove some features that show high correlation
-    NewX = RemoveCorrFeat(NewX,0.9,np.around(NewX.shape[1]*.8).astype(int))
+    NotDone = 1
+    while NotDone:
+        NewX = pd.Series().reindex_like(y_train) # create temp pandas Series 
+        ResultParams = [None]*len(Models)
+        for i in range(len(NumbModels)):
+            print('## Searching parameter set for model: {} ... '.format(Models[i]))
+            ResultParams[i], ThisClf = ModelParamSearch(Params[i], Models[i], NumbModels[i], 
+                                         N_splits, X_train, y_train)
+            print('## Creating classifiers and predicting results of model: {} ...'.format(Models[i]))
+            for ii in range(len(ResultParams[i])):
+                # create classifiers and fit it
+                ThisClf.set_params(**ResultParams[i][ii]).fit(X_train, y_train)
+                ThisPred = ThisClf.predict(X_train) # prediction of this model
+                ThisTempPredSeries = pd.Series(ThisPred, index=y_train.index)
+                NewX = pd.concat([NewX, ThisTempPredSeries], axis=1)
+                
+        ColumnNumbers = [x for x in range(NewX.shape[1])]
+        ColumnNumbers.remove(0)
+        NewX = NewX.iloc[:, ColumnNumbers]
+        
+        ColNames = []
+        for i in range(len(NumbModels)):
+            for ii in range(NumbModels[i]):
+                ColNames.append(Models[i]+str(ii+1))
+        NewX.columns = ColNames # rename columns
+        
+        # Let's remove some features that show high correlation
+        NewX = RemoveCorrFeat(NewX,0.9,np.around(NewX.shape[1]*.8).astype(int))
+        if NewX.shape[1] != 0:
+            NotDone = 0
     
     NewNewX = pd.Series()
     for i in range(NewX.columns.shape[0]):
@@ -432,10 +445,9 @@ print('# Number of models to use: {}.'.format(NumbModels))
 FirstX, FirstXX = ModelStacking(Params, Models, NumbModels, X, y, Test)
 
 ## 2. Second stage
-Models = ['XGB']
-NumbModels = [5] # [5 1 4] without FM is the best 0.85
-Params = [XGBparam]
-#Params = [XGBparam, NNparam, FMparam, LRparam]
+Models = ['XGB', 'LR', 'RF']
+NumbModels = [5, 4, 1] # [5 1 4] without FM is the best 0.85
+Params = [XGBparam, LRparam, RFparam]
 
 print('# Second stage : {}.'.format(Models))
 print('# Number of models to use: {}.'.format(NumbModels))    
