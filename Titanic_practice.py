@@ -124,3 +124,41 @@ LogisticRegression_y_test = LogisticRegression_clf.predict(X_test)
 from sklearn.metrics import roc_auc_score
 print('ROC score for the logistic regression model (default set) is {}.'.format(roc_auc_score(LogisticRegression_y_test, y_test)))
 
+
+# Now, let's try the randomized hyperparameter search
+from sklearn.model_selection import RandomizedSearchCV, ShuffleSplit
+
+LRparam = {"solver": ["newton-cg", "lbfgs", "liblinear", "sag", "saga"],
+                  "C": [1e-3, 1e-2, 0.1, 1, 10, 1e2],
+                  "fit_intercept": [True, False]}
+ss = ShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
+LogisticRegression_RS_clf = LogisticRegression(max_iter=2000)
+random_search = RandomizedSearchCV(LogisticRegression_RS_clf, param_distributions=LRparam,
+                                       n_iter=10,scoring='roc_auc',
+                                       cv=ss)
+random_search.fit(X_train, y_train)
+
+MeanTestScore = random_search.cv_results_['mean_test_score']
+MeanTrainScore = random_search.cv_results_['mean_train_score']
+MeanTestScoreSortedDesInd = (-MeanTestScore).argsort()[:MeanTestScore.shape[0]] # sorted index of cv in terms of testing score
+
+ResultInd = []
+
+for i in range(MeanTestScore.shape[0]):
+    if MeanTrainScore[MeanTestScoreSortedDesInd[i]] < 0.95:
+        ResultInd.append(MeanTestScoreSortedDesInd[i])
+        
+CVResult = random_search.cv_results_
+ResultParamList = []
+for i in range(9):
+    ResultParamList.append(CVResult['params'][ResultInd[i]])
+    
+scores = []
+for i in range(len(ResultParamList)):
+    this_temp_clf = LogisticRegression(**ResultParamList[i]).fit(X_train, y_train)
+    this_temp_y_test = this_temp_clf.predict(X_test)
+    scores.append(roc_auc_score(this_temp_y_test, y_test))
+    
+LogisticRegression_best_paramset_clf = LogisticRegression(**ResultParamList[np.argmax(scores)]).fit(X_train, y_train)
+LogisticRegression_best_paramset_y_test = LogisticRegression_best_paramset_clf.predict(X_test)
+print('ROC score for the logistic regression model (best param set) is {}.'.format(roc_auc_score(LogisticRegression_best_paramset_y_test, y_test)))
